@@ -1,3 +1,6 @@
+
+
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -1068,8 +1071,14 @@
 
                 return { ok: false, error: `未知的 Supabase action：${action}` };
             } catch (error) {
-                console.warn("Supabase 同步失敗，暫時使用本機資料。", error);
-                return { ok: false, error: error.message || String(error) };
+                const message = error.message || error.details || error.hint || String(error);
+                console.error("Supabase 同步失敗", {
+                    action,
+                    payload,
+                    message,
+                    error
+                });
+                return { ok: false, error: message };
             }
         }
 
@@ -1921,15 +1930,25 @@
 
             // --- 發送 API ---
             const result = await api('createGuest', newGuest);
-            guests.push(newGuest);
-            saveState();
 
             if (result.ok) {
-                  await loadGuestsFromSheet();
-                  showToast(`成功！感謝 ${name} 的回覆與登記`, 'success');
-              } else {
-                  showToast(`同步失敗，請稍後檢查設定`, 'error');
-              }
+                if (result.guest) {
+                    guests = guests.filter(g => g.id !== result.guest.id && g.phone !== result.guest.phone);
+                    guests.push(result.guest);
+                } else {
+                    guests.push(newGuest);
+                }
+                saveState();
+                await loadGuestsFromSheet();
+                showToast(`成功！感謝 ${name} 的回覆與登記`, 'success');
+            } else {
+                console.error("賓客資料寫入 Supabase 失敗", result);
+                showToast(`同步失敗：${result.error || "請檢查 Supabase 設定"}`, 'error');
+                btn.disabled = false;
+                btnText.textContent = originalText;
+                btnIcon.className = 'fa-solid fa-heart-circle-check';
+                return;
+            }
 
             // 重置表單
             document.getElementById('rsvp-form').reset();
